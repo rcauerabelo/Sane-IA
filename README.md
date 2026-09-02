@@ -1,8 +1,8 @@
-# AquaIA
+# SaneIA
 
 ## Nome do Projeto
 
-AquaIA
+SaneIa
 
 O AquaIA é uma plataforma que utiliza Inteligência Artificial para analisar informações sobre as condições de acesso à água e ao saneamento básico em comunidades.
 
