@@ -1,0 +1,5 @@
+{
+  "name": "SaneIA",
+  "description": "API REST para abertura de chamados sobre falta de saneamento e água nas comunidades, com análise por Inteligência Artificial.",
+  "requestFramePermissions": []
+}

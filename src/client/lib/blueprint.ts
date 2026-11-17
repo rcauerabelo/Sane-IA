@@ -1,0 +1,46 @@
+// Synchronized verbatim with firebase-blueprint.json and firestore.rules
+export const BLUEPRINT_LIMITS = {
+  ID_PATTERN: /^[a-zA-Z0-9_-]+$/,
+  UF_PATTERN: /^[A-Z]{2}$/,
+  CEP_PATTERN: /^([0-9]{8})?$/,
+  USUARIO_NOME_MIN: 2,
+  USUARIO_NOME_MAX: 120,
+  USUARIO_EMAIL_MAX: 120,
+  USUARIO_TELEFONE_MAX: 20,
+  REGIAO_BAIRRO_MIN: 2,
+  REGIAO_BAIRRO_MAX: 100,
+  REGIAO_CIDADE_MIN: 2,
+  REGIAO_CIDADE_MAX: 100,
+  ENDERECO_APELIDO_MIN: 1,
+  ENDERECO_APELIDO_MAX: 40,
+  ENDERECO_CEP_MAX: 8,
+  ENDERECO_LOGRADOURO_MIN: 2,
+  ENDERECO_LOGRADOURO_MAX: 160,
+  ENDERECO_NUMERO_MAX: 20,
+  ENDERECO_COMPLEMENTO_MAX: 80,
+  ENDERECO_REFERENCIA_MAX: 140,
+  CHAMADO_TITULO_MIN: 3,
+  CHAMADO_TITULO_MAX: 150,
+  CHAMADO_DESCRICAO_MAX: 2000,
+  CHAMADO_ENDERECO_RESUMO_MAX: 300,
+  CHAMADO_MAX_FOTOS: 20,
+  FOTO_MAX_INPUT_BYTES: 5 * 1024 * 1024,
+  FOTO_DATA_URL_MAX_CHARS: 900000,
+} as const;
+
+export type StatusChamado = 'ABERTO' | 'EM_ANALISE' | 'ENCAMINHADO' | 'RESOLVIDO';
+export type UrgenciaIA = 'BAIXA' | 'MEDIA' | 'ALTA' | 'INDEFINIDA';
+
+export const STATUS_LABELS: Record<StatusChamado, string> = {
+  ABERTO: 'Aberto',
+  EM_ANALISE: 'Em análise',
+  ENCAMINHADO: 'Encaminhado',
+  RESOLVIDO: 'Resolvido',
+};
+
+export const URGENCIA_LABELS: Record<UrgenciaIA, string> = {
+  BAIXA: 'Baixa',
+  MEDIA: 'Média',
+  ALTA: 'Alta',
+  INDEFINIDA: 'Indefinida',
+};

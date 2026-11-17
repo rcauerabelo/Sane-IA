@@ -1,0 +1,431 @@
+{
+  "entities": {
+    "Usuario": {
+      "title": "Usuario",
+      "description": "Perfil privado do morador autenticado via Google.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nome": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "telefone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20
+        },
+        "regiaoPadraoId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "cadastroCompleto": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "nome", "email", "telefone", "cadastroCompleto", "createdAt", "updatedAt"]
+    },
+    "Regiao": {
+      "title": "Regiao",
+      "description": "Bairro, cidade e estado onde ocorrem os chamados.",
+      "type": "object",
+      "properties": {
+        "bairro": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "cidade": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "estado": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$"
+        },
+        "criadoPorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["bairro", "cidade", "estado", "criadoPorUid", "createdAt"]
+    },
+    "TipoProblema": {
+      "title": "TipoProblema",
+      "description": "Categoria de problema de água e saneamento.",
+      "type": "object",
+      "properties": {
+        "nome": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        }
+      },
+      "required": ["nome"]
+    },
+    "OrgaoResponsavel": {
+      "title": "OrgaoResponsavel",
+      "description": "Órgão público ou concessionária responsável pelo atendimento.",
+      "type": "object",
+      "properties": {
+        "nome": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "contato": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": ["nome", "contato"]
+    },
+    "Chamado": {
+      "title": "Chamado",
+      "description": "Ocorrência de saneamento aberta por um morador.",
+      "type": "object",
+      "properties": {
+        "titulo": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 150
+        },
+        "descricao": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "dataAbertura": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ABERTO", "EM_ANALISE", "ENCAMINHADO", "RESOLVIDO"]
+        },
+        "usuarioId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "usuarioNome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "regiaoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "regiaoResumo": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 220
+        },
+        "tipoProblemaId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "tipoProblemaNome": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "fotosCount": {
+          "type": "integer"
+        },
+        "enderecoId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "enderecoResumo": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "titulo",
+        "descricao",
+        "dataAbertura",
+        "status",
+        "usuarioId",
+        "usuarioNome",
+        "regiaoId",
+        "regiaoResumo",
+        "tipoProblemaId",
+        "tipoProblemaNome",
+        "fotosCount",
+        "updatedAt"
+      ]
+    },
+    "Endereco": {
+      "title": "Endereco",
+      "description": "Endereço salvo pelo morador com CEP e coordenadas no mapa (Meus Endereços).",
+      "type": "object",
+      "properties": {
+        "usuarioId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "apelido": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "cep": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 8,
+          "pattern": "^([0-9]{8})?$"
+        },
+        "logradouro": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "numero": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20
+        },
+        "complemento": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80
+        },
+        "bairro": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "cidade": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "estado": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$"
+        },
+        "referencia": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "principal": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "usuarioId",
+        "apelido",
+        "cep",
+        "logradouro",
+        "numero",
+        "complemento",
+        "bairro",
+        "cidade",
+        "estado",
+        "referencia",
+        "latitude",
+        "longitude",
+        "principal",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Foto": {
+      "title": "Foto",
+      "description": "Foto anexada a um chamado.",
+      "type": "object",
+      "properties": {
+        "nomeArquivo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 60
+        },
+        "imagemDataUrl": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 900000
+        },
+        "chamadoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "usuarioId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["nomeArquivo", "mimeType", "imagemDataUrl", "chamadoId", "usuarioId", "createdAt"]
+    },
+    "AnaliseIA": {
+      "title": "AnaliseIA",
+      "description": "Resultado da análise da IA vinculada ao chamado.",
+      "type": "object",
+      "properties": {
+        "urgencia": {
+          "type": "string",
+          "enum": ["BAIXA", "MEDIA", "ALTA", "INDEFINIDA"]
+        },
+        "orientacao": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000
+        },
+        "respostaBruta": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4000
+        },
+        "dataAnalise": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "chamadoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "usuarioId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "orgaoId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "orgaoNome": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "orgaoContato": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "urgencia",
+        "orientacao",
+        "respostaBruta",
+        "dataAnalise",
+        "chamadoId",
+        "usuarioId",
+        "orgaoId",
+        "orgaoNome",
+        "orgaoContato"
+      ]
+    }
+  },
+  "firestore": {
+    "/usuarios/{userId}": {
+      "schema": { "$ref": "#/entities/Usuario" },
+      "description": "Dados cadastrais privados do usuário autenticado (PII isolada ao dono)."
+    },
+    "/usuarios/{userId}/enderecos/{enderecoId}": {
+      "schema": { "$ref": "#/entities/Endereco" },
+      "description": "Endereços salvos privados do morador (Meus Endereços com CEP e ponto no mapa)."
+    },
+    "/regioes/{regiaoId}": {
+      "schema": { "$ref": "#/entities/Regiao" },
+      "description": "Catálogo de bairros e cidades atendidos."
+    },
+    "/tipos_problema/{tipoId}": {
+      "schema": { "$ref": "#/entities/TipoProblema" },
+      "description": "Catálogo dos tipos de problema de saneamento."
+    },
+    "/orgaos_responsaveis/{orgaoId}": {
+      "schema": { "$ref": "#/entities/OrgaoResponsavel" },
+      "description": "Catálogo de órgãos responsáveis."
+    },
+    "/chamados/{chamadoId}": {
+      "schema": { "$ref": "#/entities/Chamado" },
+      "description": "Chamados abertos pelos moradores."
+    },
+    "/chamados/{chamadoId}/fotos/{fotoId}": {
+      "schema": { "$ref": "#/entities/Foto" },
+      "description": "Subcoleção de fotos anexadas ao chamado."
+    },
+    "/chamados/{chamadoId}/analise/{analiseId}": {
+      "schema": { "$ref": "#/entities/AnaliseIA" },
+      "description": "Resultado da análise da IA para o chamado."
+    }
+  }
+}

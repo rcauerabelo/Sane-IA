@@ -1,0 +1,20 @@
+saneia:
+  firebase:
+    enabled: false
+    check-revoked: false
+  ia:
+    api-url: https://api.groq.com/openai/v1/chat/completions
+    api-key: test-key
+    model: openai/gpt-oss-120b
+    timeout-seconds: 5
+  maps:
+    api-key: test-maps-key
+    geocode-url: https://maps.googleapis.com/maps/api/geocode/json
+    solution-id: gmp_mcp_codeassist_v1_aistudio
+    timeout-seconds: 5
+  viacep:
+    base-url: https://viacep.com.br/ws
+    timeout-seconds: 5
+  cors:
+    allowed-origins:
+      - http://localhost:3000

@@ -1,0 +1,34 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: saneia-backend
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+saneia:
+  firebase:
+    enabled: ${FIREBASE_ENABLED:true}
+    check-revoked: ${FIREBASE_CHECK_REVOKED:false}
+    project-id: ${FIREBASE_PROJECT_ID:gen-lang-client-0625814070}
+    database-id: ${FIREBASE_DATABASE_ID:ai-studio-saneia-7a98979b-e267-4f19-8dc1-db7bc22e3868}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+    credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
+  ia:
+    api-url: ${IA_API_URL:https://api.groq.com/openai/v1/chat/completions}
+    api-key: ${GROQ_API_KEY:}
+    model: ${IA_API_MODEL:openai/gpt-oss-120b}
+    timeout-seconds: 25
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:${VITE_GOOGLE_MAPS_API_KEY:}}
+    geocode-url: https://maps.googleapis.com/maps/api/geocode/json
+    solution-id: gmp_mcp_codeassist_v1_aistudio
+    timeout-seconds: 8
+  viacep:
+    base-url: https://viacep.com.br/ws
+    timeout-seconds: 7
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}

@@ -1,0 +1,320 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection check doc used on app boot
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // ---------- Global Hardened Helpers ----------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---------- Validation Blueprints ----------
+    function isValidUsuario(data) {
+      return data.keys().hasAll([
+        'uid', 'nome', 'email', 'telefone', 'cadastroCompleto', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid', 'nome', 'email', 'telefone', 'regiaoPadraoId', 'cadastroCompleto', 'createdAt', 'updatedAt'
+      ])
+      && data.uid is string && data.uid == request.auth.uid && isValidId(data.uid)
+      && data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 120
+      && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+      && data.telefone is string && data.telefone.size() <= 20
+      && (!('regiaoPadraoId' in data) || (data.regiaoPadraoId is string && data.regiaoPadraoId.size() <= 128))
+      && data.cadastroCompleto is bool
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidRegiao(data) {
+      return data.keys().hasAll(['bairro', 'cidade', 'estado', 'criadoPorUid', 'createdAt'])
+      && data.keys().hasOnly(['bairro', 'cidade', 'estado', 'criadoPorUid', 'createdAt'])
+      && data.bairro is string && data.bairro.size() >= 2 && data.bairro.size() <= 100
+      && data.cidade is string && data.cidade.size() >= 2 && data.cidade.size() <= 100
+      && data.estado is string && data.estado.size() == 2 && data.estado.matches('^[A-Z]{2}$')
+      && data.criadoPorUid is string && data.criadoPorUid == request.auth.uid
+      && data.createdAt is timestamp
+      && data.createdAt == request.time;
+    }
+
+    function isValidTipoProblema(data) {
+      return data.keys().hasAll(['nome'])
+      && data.keys().hasOnly(['nome'])
+      && data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 100;
+    }
+
+    function isValidOrgao(data) {
+      return data.keys().hasAll(['nome', 'contato'])
+      && data.keys().hasOnly(['nome', 'contato'])
+      && data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 120
+      && data.contato is string && data.contato.size() >= 1 && data.contato.size() <= 100;
+    }
+
+    function isValidChamado(data) {
+      return data.keys().hasAll([
+        'titulo', 'descricao', 'dataAbertura', 'status',
+        'usuarioId', 'usuarioNome', 'regiaoId', 'regiaoResumo',
+        'tipoProblemaId', 'tipoProblemaNome', 'fotosCount', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'titulo', 'descricao', 'dataAbertura', 'status',
+        'usuarioId', 'usuarioNome', 'regiaoId', 'regiaoResumo',
+        'tipoProblemaId', 'tipoProblemaNome', 'fotosCount',
+        'enderecoId', 'enderecoResumo', 'latitude', 'longitude', 'updatedAt'
+      ])
+      && data.titulo is string && data.titulo.size() >= 3 && data.titulo.size() <= 150
+      && data.descricao is string && data.descricao.size() <= 2000
+      && data.dataAbertura is timestamp
+      && data.status is string && data.status in ['ABERTO', 'EM_ANALISE', 'ENCAMINHADO', 'RESOLVIDO']
+      && data.usuarioId is string && data.usuarioId == request.auth.uid
+      && data.usuarioNome is string && data.usuarioNome.size() >= 1 && data.usuarioNome.size() <= 120
+      && isValidId(data.regiaoId)
+      && data.regiaoResumo is string && data.regiaoResumo.size() >= 3 && data.regiaoResumo.size() <= 220
+      && isValidId(data.tipoProblemaId)
+      && data.tipoProblemaNome is string && data.tipoProblemaNome.size() >= 2 && data.tipoProblemaNome.size() <= 100
+      && data.fotosCount is int && data.fotosCount >= 0 && data.fotosCount <= 20
+      && (!('enderecoId' in data) || (data.enderecoId is string && data.enderecoId.size() <= 128))
+      && (!('enderecoResumo' in data) || (data.enderecoResumo is string && data.enderecoResumo.size() <= 300))
+      && (!('latitude' in data) || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90))
+      && (!('longitude' in data) || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180))
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidEndereco(data, userId) {
+      return data.keys().hasAll([
+        'usuarioId', 'apelido', 'cep', 'logradouro', 'numero', 'complemento',
+        'bairro', 'cidade', 'estado', 'referencia', 'latitude', 'longitude',
+        'principal', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'usuarioId', 'apelido', 'cep', 'logradouro', 'numero', 'complemento',
+        'bairro', 'cidade', 'estado', 'referencia', 'latitude', 'longitude',
+        'principal', 'createdAt', 'updatedAt'
+      ])
+      && data.usuarioId is string && data.usuarioId == userId && data.usuarioId == request.auth.uid
+      && data.apelido is string && data.apelido.size() >= 1 && data.apelido.size() <= 40
+      && data.cep is string && data.cep.size() <= 8 && data.cep.matches('^([0-9]{8})?$')
+      && data.logradouro is string && data.logradouro.size() >= 2 && data.logradouro.size() <= 160
+      && data.numero is string && data.numero.size() <= 20
+      && data.complemento is string && data.complemento.size() <= 80
+      && data.bairro is string && data.bairro.size() >= 2 && data.bairro.size() <= 100
+      && data.cidade is string && data.cidade.size() >= 2 && data.cidade.size() <= 100
+      && data.estado is string && data.estado.size() == 2 && data.estado.matches('^[A-Z]{2}$')
+      && data.referencia is string && data.referencia.size() <= 140
+      && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+      && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+      && data.principal is bool
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidFoto(data, chamadoId) {
+      return data.keys().hasAll(['nomeArquivo', 'mimeType', 'imagemDataUrl', 'chamadoId', 'usuarioId', 'createdAt'])
+      && data.keys().hasOnly(['nomeArquivo', 'mimeType', 'imagemDataUrl', 'chamadoId', 'usuarioId', 'createdAt'])
+      && data.nomeArquivo is string && data.nomeArquivo.size() >= 1 && data.nomeArquivo.size() <= 255
+      && data.mimeType is string && data.mimeType.size() >= 5 && data.mimeType.size() <= 60
+      && data.imagemDataUrl is string && data.imagemDataUrl.size() >= 20 && data.imagemDataUrl.size() <= 900000
+      && data.chamadoId is string && data.chamadoId == chamadoId
+      && data.usuarioId is string && data.usuarioId == request.auth.uid
+      && data.createdAt is timestamp
+      && data.createdAt == request.time;
+    }
+
+    function isValidAnalise(data, chamadoId) {
+      return data.keys().hasAll([
+        'urgencia', 'orientacao', 'respostaBruta', 'dataAnalise',
+        'chamadoId', 'usuarioId', 'orgaoId', 'orgaoNome', 'orgaoContato'
+      ])
+      && data.keys().hasOnly([
+        'urgencia', 'orientacao', 'respostaBruta', 'dataAnalise',
+        'chamadoId', 'usuarioId', 'orgaoId', 'orgaoNome', 'orgaoContato'
+      ])
+      && data.urgencia is string && data.urgencia in ['BAIXA', 'MEDIA', 'ALTA', 'INDEFINIDA']
+      && data.orientacao is string && data.orientacao.size() <= 2000
+      && data.respostaBruta is string && data.respostaBruta.size() <= 4000
+      && data.dataAnalise is timestamp && data.dataAnalise == request.time
+      && data.chamadoId is string && data.chamadoId == chamadoId
+      && data.usuarioId is string && data.usuarioId == request.auth.uid
+      && data.orgaoId is string && data.orgaoId.size() <= 128
+      && data.orgaoNome is string && data.orgaoNome.size() <= 120
+      && data.orgaoContato is string && data.orgaoContato.size() <= 100;
+    }
+
+    // ---------- Collections ----------
+    // PII strictly isolated to document owner
+    match /usuarios/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId)
+        && isEmailVerified()
+        && isValidId(userId)
+        && isValidUsuario(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isEmailVerified()
+        && isValidId(userId)
+        && isValidUsuario(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'nome', 'telefone', 'regiaoPadraoId', 'cadastroCompleto', 'updatedAt'
+        ]);
+
+      match /enderecos/{enderecoId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(enderecoId);
+        allow list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId)
+          && isEmailVerified()
+          && isValidId(userId)
+          && isValidId(enderecoId)
+          && isValidEndereco(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isOwner(userId)
+          && isEmailVerified()
+          && isValidId(userId)
+          && isValidId(enderecoId)
+          && isValidEndereco(incoming(), userId)
+          && incoming().usuarioId == existing().usuarioId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'apelido', 'cep', 'logradouro', 'numero', 'complemento',
+            'bairro', 'cidade', 'estado', 'referencia',
+            'latitude', 'longitude', 'principal', 'updatedAt'
+          ]);
+        allow delete: if isOwner(userId) && isEmailVerified() && isValidId(userId) && isValidId(enderecoId);
+      }
+    }
+
+    // Regions catalog (non-PII, shared for selection)
+    match /regioes/{regiaoId} {
+      allow get: if isSignedIn() && isValidId(regiaoId);
+      allow list: if isSignedIn();
+      allow create: if isEmailVerified()
+        && isValidId(regiaoId)
+        && isValidRegiao(incoming());
+    }
+
+    // Problem types catalog (seeded once, immutable)
+    match /tipos_problema/{tipoId} {
+      allow get: if isSignedIn() && isValidId(tipoId);
+      allow list: if isSignedIn();
+      allow create: if isEmailVerified()
+        && isValidId(tipoId)
+        && tipoId in ['1', '2', '3', '4', '5', '6']
+        && isValidTipoProblema(incoming());
+    }
+
+    // Responsible agencies catalog (seeded once, immutable)
+    match /orgaos_responsaveis/{orgaoId} {
+      allow get: if isSignedIn() && isValidId(orgaoId);
+      allow list: if isSignedIn();
+      allow create: if isEmailVerified()
+        && isValidId(orgaoId)
+        && orgaoId in ['1', '2', '3']
+        && isValidOrgao(incoming());
+    }
+
+    // Tickets (strict owner isolation on get, list, create, update)
+    match /chamados/{chamadoId} {
+      allow get: if isSignedIn() && isValidId(chamadoId) && existing().usuarioId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.usuarioId == request.auth.uid;
+      allow create: if isEmailVerified()
+        && isValidId(chamadoId)
+        && isValidChamado(incoming())
+        && incoming().status == 'ABERTO'
+        && incoming().fotosCount == 0
+        && incoming().dataAbertura == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/regioes/$(incoming().regiaoId))
+        && exists(/databases/$(database)/documents/tipos_problema/$(incoming().tipoProblemaId));
+      allow update: if isEmailVerified()
+        && isValidId(chamadoId)
+        && existing().usuarioId == request.auth.uid
+        && existing().status != 'RESOLVIDO'
+        && isValidChamado(incoming())
+        && incoming().usuarioId == existing().usuarioId
+        && incoming().dataAbertura == existing().dataAbertura
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['fotosCount', 'updatedAt'])
+            && incoming().fotosCount == existing().fotosCount + 1)
+          ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && incoming().status in ['EM_ANALISE', 'ENCAMINHADO', 'RESOLVIDO'])
+        );
+
+      match /fotos/{fotoId} {
+        allow get: if isSignedIn()
+          && isValidId(chamadoId)
+          && isValidId(fotoId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+        allow list: if isSignedIn()
+          && isValidId(chamadoId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+        allow create: if isEmailVerified()
+          && isValidId(chamadoId)
+          && isValidId(fotoId)
+          && isValidFoto(incoming(), chamadoId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+      }
+
+      match /analise/{analiseId} {
+        allow get: if isSignedIn()
+          && isValidId(chamadoId)
+          && isValidId(analiseId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+        allow list: if isSignedIn()
+          && isValidId(chamadoId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+        allow create: if isEmailVerified()
+          && isValidId(chamadoId)
+          && analiseId == 'atual'
+          && isValidAnalise(incoming(), chamadoId)
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+        allow update: if isEmailVerified()
+          && isValidId(chamadoId)
+          && analiseId == 'atual'
+          && isValidAnalise(incoming(), chamadoId)
+          && incoming().chamadoId == existing().chamadoId
+          && incoming().usuarioId == existing().usuarioId
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'urgencia', 'orientacao', 'respostaBruta', 'dataAnalise',
+            'orgaoId', 'orgaoNome', 'orgaoContato'
+          ])
+          && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
+      }
+    }
+  }
+}
