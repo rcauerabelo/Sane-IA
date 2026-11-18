@@ -66,7 +66,7 @@ export const TicketsListView: React.FC<TicketsListViewProps> = ({
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-950">Meus chamados</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Acompanhe suas ocorrências registradas e solicite análise da IA.
+            Acompanhe suas ocorrências e os planos de resolução gerados pela IA.
           </p>
         </div>
 
@@ -211,6 +211,10 @@ export const TicketsListView: React.FC<TicketsListViewProps> = ({
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">
                     {chamado.fotosCount} {chamado.fotosCount === 1 ? 'foto' : 'fotos'}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {chamado.status === 'ABERTO' ? 'Aguardando análise IA' : 'Plano IA pronto'}
                   </span>
                 </div>
               </div>

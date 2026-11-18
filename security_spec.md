@@ -6,7 +6,7 @@
 2. **Ticket Ownership (`chamados/{chamadoId}`)**: A ticket cannot be created without valid existing `regiaoId` and `tipoProblemaId` references, must set `usuarioId == request.auth.uid`, and must start with `status == 'ABERTO'` and `fotosCount == 0`. List queries are strictly constrained to `resource.data.usuarioId == request.auth.uid`.
 3. **Subcollections (`fotos` and `analise`)**: Both subcollections derive ownership synchronously via `get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid`.
 4. **Terminal State Lock**: Once `chamados/{chamadoId}.status == 'RESOLVIDO'`, further status or field updates on the ticket are blocked.
-5. **Strict Payload Boundaries**: Every string, enum, boolean, integer, number, and timestamp is strictly type-checked and length-bounded, and every document enforces `keys().hasAll(...)` + `keys().hasOnly(...)` on create and `affectedKeys().hasOnly(...)` on update.
+5. **Strict Payload Boundaries**: Every string, enum, boolean, integer, number, bounded array (`passosResolucao <= 8`), and timestamp is strictly type-checked and length-bounded, and every document enforces `keys().hasAll(...)` + `keys().hasOnly(...)` on create and `affectedKeys().hasOnly(...)` on update.
 6. **Saved Addresses PII Isolation (`usuarios/{userId}/enderecos/{enderecoId}`)**: Saved street addresses, CEP, and exact coordinates are strictly private to the owner (`request.auth.uid == userId` with verified email). `usuarioId` and `createdAt` are immutable; coordinates are strictly bounded (`lat` in `[-90, 90]`, `lng` in `[-180, 180]`).
 
 ## 2. The "Dirty Dozen" Adversarial Payloads

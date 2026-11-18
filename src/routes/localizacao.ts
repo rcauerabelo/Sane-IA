@@ -128,7 +128,16 @@ async function callGoogleGeocode(
     signal: AbortSignal.timeout(8000),
   });
 
-  const data = (await response.json()) as GoogleGeocodeResponse;
+  const rawText = await response.text();
+  let data: GoogleGeocodeResponse;
+  try {
+    data = JSON.parse(rawText) as GoogleGeocodeResponse;
+  } catch {
+    throw new HttpError(
+      502,
+      `Resposta inválida da API de Geocodificação (HTTP ${response.status}).`
+    );
+  }
 
   if (
     response.status === 429 ||
@@ -180,7 +189,8 @@ localizacaoRouter.get('/cep/:cep', async (req, res, next) => {
       throw new HttpError(502, 'Não foi possível consultar o serviço de CEP.');
     }
 
-    const viacepData = (await viacepResp.json()) as {
+    const viacepText = await viacepResp.text();
+    let viacepData: {
       erro?: boolean | string;
       cep?: string;
       logradouro?: string;
@@ -189,6 +199,11 @@ localizacaoRouter.get('/cep/:cep', async (req, res, next) => {
       localidade?: string;
       uf?: string;
     };
+    try {
+      viacepData = JSON.parse(viacepText) as typeof viacepData;
+    } catch {
+      throw new HttpError(502, 'O serviço de CEP retornou uma resposta inválida.');
+    }
 
     if (viacepData.erro === true || viacepData.erro === 'true') {
       throw new HttpError(404, 'CEP não encontrado.');

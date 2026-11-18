@@ -379,6 +379,25 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 100
+        },
+        "diagnostico": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 600
+        },
+        "prazoEstimado": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 80
+        },
+        "passosResolucao": {
+          "type": "array",
+          "description": "Lista ordenada com passos práticos sugeridos pela IA para resolver o chamado."
+        },
+        "modeloProtocolo": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1500
         }
       },
       "required": [

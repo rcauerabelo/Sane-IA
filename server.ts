@@ -17,8 +17,37 @@ interface AnaliseRequestBody {
   tipoProblemaNome?: string;
   descricao?: string;
   regiaoResumo?: string;
+  enderecoResumo?: string;
   fotosCount?: number;
+  fotos?: Array<{ imagemDataUrl: string; mimeType?: string }>;
   orgaos?: Array<{ id: string; nome: string; contato: string }>;
+}
+
+interface SugerirRequestBody {
+  descricao?: string;
+  fotos?: Array<{ imagemDataUrl: string; mimeType?: string }>;
+  tipos?: Array<{ id: string; nome: string }>;
+}
+
+function normalizePassosResolucao(raw: unknown, fallbackText: string): string[] {
+  let items: string[] = [];
+  if (Array.isArray(raw)) {
+    items = raw.map((item) => String(item || '').trim()).filter(Boolean);
+  } else if (typeof raw === 'string' && raw.trim()) {
+    items = raw
+      .split(/\r?\n+/)
+      .map((line) => line.replace(/^\s*(?:\d+[.)-]|[-*•])\s*/, '').trim())
+      .filter(Boolean);
+  }
+
+  if (items.length === 0 && fallbackText.trim()) {
+    items = fallbackText
+      .split(/\r?\n+/)
+      .map((line) => line.replace(/^\s*(?:\d+[.)-]|[-*•])\s*/, '').trim())
+      .filter(Boolean);
+  }
+
+  return items.slice(0, 8).map((s) => s.slice(0, 240));
 }
 
 async function startServer() {
@@ -27,14 +56,57 @@ async function startServer() {
   const HOST = '0.0.0.0';
   const uploadsDir = process.env.SANEIA_UPLOADS_DIR || 'uploads';
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '12mb' }));
   app.use('/uploads', express.static(uploadsDir));
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', service: 'sane-ia' });
   });
 
-  // Server-side proxy for AI ticket analysis (keeps GROQ_API_KEY exclusively on the server)
+  // Server-side multimodal AI suggestion from photo + description (GEMINI_API_KEY stays on server)
+  app.post('/api/analisar/sugerir', async (req, res, next) => {
+    try {
+      const body = req.body as SugerirRequestBody;
+      const descricao = (body.descricao || '').trim();
+      const fotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 4) : [];
+      const tipos = Array.isArray(body.tipos) ? body.tipos : [];
+
+      if (fotos.length === 0 && descricao.length < 3) {
+        throw new HttpError(
+          400,
+          'Envie ao menos uma foto ou descreva o problema para a IA sugerir.'
+        );
+      }
+
+      const sugestao = await iaClient.sugerirPreenchimento({
+        descricao,
+        fotos,
+        tipos,
+      });
+
+      const normTipo = sugestao.tipo_problema.toLowerCase();
+      const matchedTipo =
+        tipos.find((t) => t.nome.toLowerCase() === normTipo) ??
+        tipos.find(
+          (t) =>
+            normTipo.length > 0 &&
+            (t.nome.toLowerCase().includes(normTipo) || normTipo.includes(t.nome.toLowerCase()))
+        ) ??
+        tipos[0] ??
+        null;
+
+      res.json({
+        titulo: sugestao.titulo || matchedTipo?.nome || 'Ocorrência de saneamento',
+        tipoId: matchedTipo?.id ?? '',
+        tipoNome: matchedTipo?.nome ?? sugestao.tipo_problema,
+        descricaoSugerida: sugestao.descricao_sugerida || '',
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Server-side proxy for multimodal AI ticket analysis (keeps GEMINI_API_KEY exclusively on the server)
   app.post('/api/analisar', async (req, res, next) => {
     try {
       const body = req.body as AnaliseRequestBody;
@@ -42,54 +114,79 @@ async function startServer() {
       const tipoProblemaNome = (body.tipoProblemaNome || '').trim();
       const descricao = (body.descricao || '').trim();
       const regiaoResumo = (body.regiaoResumo || '').trim();
-      const fotosCount = Number(body.fotosCount || 0);
+      const enderecoResumo = (body.enderecoResumo || '').trim();
+      const fotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 4) : [];
+      const fotosCount = Number(body.fotosCount || fotos.length || 0);
       const orgaos = Array.isArray(body.orgaos) ? body.orgaos : [];
 
-      if (!titulo || !tipoProblemaNome) {
-        throw new HttpError(400, 'Título e tipo de problema são obrigatórios para análise.');
+      if (!titulo && !descricao && fotos.length === 0) {
+        throw new HttpError(
+          400,
+          'Informe título, descrição ou anexe uma foto para análise.'
+        );
       }
 
-      const nomesOrgaos = orgaos.map((o) => o.nome).join('; ');
-      const prompt =
-        'Analise o chamado de saneamento abaixo e responda SOMENTE em JSON com as chaves: ' +
-        '"tipo" (texto), "urgencia" (BAIXA, MEDIA ou ALTA), ' +
-        `"orgao_responsavel" (exatamente um destes: ${nomesOrgaos}) e ` +
-        '"orientacao" (passos práticos para o morador e para o órgão, em até 5 linhas).\n\n' +
-        `Título: ${titulo}\n` +
-        `Tipo informado: ${tipoProblemaNome}\n` +
-        `Descrição: ${descricao}\n` +
-        `Região: ${regiaoResumo}\n` +
-        `Fotos anexadas: ${fotosCount}`;
+      const localTexto = enderecoResumo || regiaoResumo || 'Local não informado';
+      const result = await iaClient.analisarOcorrencia({
+        titulo: titulo || tipoProblemaNome || 'Ocorrência de saneamento',
+        tipoProblemaNome: tipoProblemaNome || 'Saneamento básico',
+        descricao,
+        regiaoResumo,
+        enderecoResumo,
+        fotosCount,
+        fotos,
+        orgaos,
+      });
 
-      const respostaBruta = await iaClient.enviar(prompt);
+      const urgencia = result.urgencia;
+      const prazoEstimado = (
+        result.prazo_estimado ||
+        (urgencia === 'ALTA'
+          ? 'Atendimento prioritário (até 24h)'
+          : urgencia === 'BAIXA'
+          ? '3 a 5 dias úteis'
+          : '24h a 48h')
+      ).slice(0, 80);
 
-      let urgencia: 'BAIXA' | 'MEDIA' | 'ALTA' | 'INDEFINIDA' = 'MEDIA';
-      let orientacao = '';
-      let matchedOrgao: { id: string; nome: string; contato: string } | null = null;
+      const passosResolucao = normalizePassosResolucao(
+        result.passos_resolucao,
+        result.orientacao || result.diagnostico
+      );
+      const diagnostico = (result.diagnostico || result.orientacao || '').slice(0, 600);
+      const orientacao = (
+        result.orientacao || [diagnostico, ...passosResolucao].filter(Boolean).join('\n')
+      ).slice(0, 2000);
 
-      try {
-        const parsed = JSON.parse(respostaBruta) as {
-          urgencia?: unknown;
-          orientacao?: unknown;
-          orgao_responsavel?: unknown;
-        };
-        const rawUrg = String(parsed.urgencia || 'MEDIA').toUpperCase();
-        if (rawUrg === 'BAIXA' || rawUrg === 'MEDIA' || rawUrg === 'ALTA') {
-          urgencia = rawUrg;
-        }
-        orientacao = String(parsed.orientacao || '');
-        const nomeOrgao = String(parsed.orgao_responsavel || '').trim();
-        matchedOrgao =
-          orgaos.find((o) => o.nome.toLowerCase() === nomeOrgao.toLowerCase()) ?? null;
-      } catch {
-        urgencia = 'INDEFINIDA';
-        orientacao = respostaBruta;
-      }
+      const nomeOrgao = result.orgao_responsavel.toLowerCase();
+      const matchedOrgao =
+        orgaos.find((o) => o.nome.toLowerCase() === nomeOrgao) ??
+        orgaos.find(
+          (o) =>
+            nomeOrgao.length > 0 &&
+            (o.nome.toLowerCase().includes(nomeOrgao) ||
+              nomeOrgao.includes(o.nome.toLowerCase()))
+        ) ??
+        orgaos[0] ??
+        null;
+
+      const destino = matchedOrgao?.nome || 'Órgão Responsável';
+      const modeloProtocolo = (
+        result.modelo_protocolo ||
+        `Solicitação de atendimento — ${destino}\n` +
+          `Ocorrência: ${titulo || tipoProblemaNome} (${tipoProblemaNome})\n` +
+          `Local: ${localTexto}\n` +
+          `Descrição: ${descricao || 'Solicito vistoria técnica no local.'}\n` +
+          `Peço registro de número de protocolo e previsão de reparo.`
+      ).slice(0, 1500);
 
       res.json({
         urgencia,
+        prazoEstimado,
+        diagnostico,
+        passosResolucao,
+        modeloProtocolo,
         orientacao,
-        respostaBruta,
+        respostaBruta: result.respostaBruta.slice(0, 4000),
         orgaoId: matchedOrgao?.id ?? '',
         orgaoNome: matchedOrgao?.nome ?? '',
         orgaoContato: matchedOrgao?.contato ?? '',
@@ -102,6 +199,13 @@ async function startServer() {
   app.use('/api', cadastroRouter);
   app.use('/api', localizacaoRouter);
   app.use('/api/chamados', chamadoRouter);
+
+  app.use('/api', (_req, res) => {
+    res.status(404).json({
+      status: 404,
+      message: 'Rota da API não encontrada.',
+    });
+  });
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -131,6 +235,15 @@ async function startServer() {
       res.status(400).json({
         status: 400,
         message: err.message,
+      });
+      return;
+    }
+
+    const maybePayloadErr = err as { type?: string; status?: number };
+    if (maybePayloadErr?.type === 'entity.too.large' || maybePayloadErr?.status === 413) {
+      res.status(413).json({
+        status: 413,
+        message: 'As imagens enviadas excedem o tamanho máximo permitido. Envie menos fotos ou arquivos menores.',
       });
       return;
     }

@@ -1,3 +1,5 @@
+import { parseJsonResponse } from './httpJson';
+
 export interface CepLookupResult {
   cep: string;
   cepFormatado: string;
@@ -52,7 +54,10 @@ export async function fetchMapsApiKey(): Promise<string> {
   try {
     const resp = await fetch('/api/config/maps');
     if (!resp.ok) return '';
-    const data = (await resp.json()) as { apiKey?: string };
+    const data = await parseJsonResponse<{ apiKey?: string }>(
+      resp,
+      'Não foi possível ler a configuração do mapa.'
+    );
     return (data.apiKey || '').trim();
   } catch {
     return '';
@@ -66,7 +71,10 @@ export async function lookupCep(cep: string): Promise<CepLookupResult> {
   }
 
   const resp = await fetch(`/api/cep/${digits}`);
-  const data = (await resp.json()) as CepLookupResult & { message?: string };
+  const data = await parseJsonResponse<CepLookupResult & { message?: string }>(
+    resp,
+    'Não foi possível consultar o CEP.'
+  );
   checkQuotaResponse(resp.status, data as unknown as Record<string, unknown>);
 
   if (!resp.ok) {
@@ -83,10 +91,12 @@ export async function reverseGeocodePoint(
   const resp = await fetch(
     `/api/geocode/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
   );
-  const data = (await resp.json()) as GeocodeResult & {
-    message?: string;
-    quotaExceeded?: boolean;
-  };
+  const data = await parseJsonResponse<
+    GeocodeResult & {
+      message?: string;
+      quotaExceeded?: boolean;
+    }
+  >(resp, 'Não foi possível identificar o endereço deste ponto.');
   checkQuotaResponse(resp.status, data as unknown as Record<string, unknown>);
 
   if (!resp.ok) {
@@ -102,10 +112,12 @@ export async function forwardGeocodeAddress(
   const resp = await fetch(
     `/api/geocode/address?q=${encodeURIComponent(queryText)}`
   );
-  const data = (await resp.json()) as GeocodeResult & {
-    message?: string;
-    quotaExceeded?: boolean;
-  };
+  const data = await parseJsonResponse<
+    GeocodeResult & {
+      message?: string;
+      quotaExceeded?: boolean;
+    }
+  >(resp, 'Não foi possível localizar o endereço no mapa.');
   checkQuotaResponse(resp.status, data as unknown as Record<string, unknown>);
 
   if (!resp.ok) {

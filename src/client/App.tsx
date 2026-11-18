@@ -49,6 +49,7 @@ export const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('chamados');
   const [selectedChamadoId, setSelectedChamadoId] = useState<string | null>(null);
+  const [initialAiError, setInitialAiError] = useState('');
   const [bootError, setBootError] = useState('');
 
   useEffect(() => {
@@ -217,6 +218,7 @@ export const App: React.FC = () => {
   }
 
   const navigateTab = (tab: TabKey) => {
+    setInitialAiError('');
     setSelectedChamadoId(null);
     setActiveTab(tab);
   };
@@ -305,13 +307,20 @@ export const App: React.FC = () => {
             chamadoId={selectedChamadoId}
             orgaos={orgaos}
             hasMapsProvider={hasMapsProvider}
-            onBack={() => setSelectedChamadoId(null)}
+            initialAiError={initialAiError}
+            onBack={() => {
+              setInitialAiError('');
+              setSelectedChamadoId(null);
+            }}
           />
         ) : activeTab === 'chamados' ? (
           <TicketsListView
             chamados={chamados}
             loading={loadingChamados}
-            onSelectChamado={(id) => setSelectedChamadoId(id)}
+            onSelectChamado={(id) => {
+              setInitialAiError('');
+              setSelectedChamadoId(id);
+            }}
             onNewChamado={() => navigateTab('abrir')}
           />
         ) : activeTab === 'abrir' ? (
@@ -319,10 +328,12 @@ export const App: React.FC = () => {
             usuario={profile}
             tipos={tipos}
             regioes={regioes}
+            orgaos={orgaos}
             enderecos={enderecos}
             hasMapsProvider={hasMapsProvider}
             onRegiaoCreated={handleRegiaoCreated}
-            onCreated={(id) => {
+            onCreated={(id, aiError) => {
+              setInitialAiError(aiError || '');
               setActiveTab('chamados');
               setSelectedChamadoId(id);
             }}

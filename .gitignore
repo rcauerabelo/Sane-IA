@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+java-backend/.env
+!java-backend/.env.example
+node_modules/
+dist/
+dev-dist/
+uploads/
+java-backend/target/

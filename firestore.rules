@@ -156,7 +156,8 @@ service cloud.firestore {
       ])
       && data.keys().hasOnly([
         'urgencia', 'orientacao', 'respostaBruta', 'dataAnalise',
-        'chamadoId', 'usuarioId', 'orgaoId', 'orgaoNome', 'orgaoContato'
+        'chamadoId', 'usuarioId', 'orgaoId', 'orgaoNome', 'orgaoContato',
+        'diagnostico', 'prazoEstimado', 'passosResolucao', 'modeloProtocolo'
       ])
       && data.urgencia is string && data.urgencia in ['BAIXA', 'MEDIA', 'ALTA', 'INDEFINIDA']
       && data.orientacao is string && data.orientacao.size() <= 2000
@@ -166,7 +167,15 @@ service cloud.firestore {
       && data.usuarioId is string && data.usuarioId == request.auth.uid
       && data.orgaoId is string && data.orgaoId.size() <= 128
       && data.orgaoNome is string && data.orgaoNome.size() <= 120
-      && data.orgaoContato is string && data.orgaoContato.size() <= 100;
+      && data.orgaoContato is string && data.orgaoContato.size() <= 100
+      && (!('diagnostico' in data) || (data.diagnostico is string && data.diagnostico.size() <= 600))
+      && (!('prazoEstimado' in data) || (data.prazoEstimado is string && data.prazoEstimado.size() <= 80))
+      && (!('passosResolucao' in data) || (
+        data.passosResolucao is list
+        && data.passosResolucao.size() <= 8
+        && (data.passosResolucao.size() == 0 || (data.passosResolucao[0] is string && data.passosResolucao[0].size() <= 240))
+      ))
+      && (!('modeloProtocolo' in data) || (data.modeloProtocolo is string && data.modeloProtocolo.size() <= 1500));
     }
 
     // ---------- Collections ----------
@@ -311,7 +320,8 @@ service cloud.firestore {
           && incoming().usuarioId == existing().usuarioId
           && incoming().diff(existing()).affectedKeys().hasOnly([
             'urgencia', 'orientacao', 'respostaBruta', 'dataAnalise',
-            'orgaoId', 'orgaoNome', 'orgaoContato'
+            'orgaoId', 'orgaoNome', 'orgaoContato',
+            'diagnostico', 'prazoEstimado', 'passosResolucao', 'modeloProtocolo'
           ])
           && get(/databases/$(database)/documents/chamados/$(chamadoId)).data.usuarioId == request.auth.uid;
       }

@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Camera, MapPin, Phone, Sparkles, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  Copy,
+  Loader2,
+  MapPin,
+  Phone,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { StatusLabel, UrgenciaLabel } from '../components/StatusIndicator';
 import { TicketMapPreview } from '../components/TicketMapPreview';
 import { STATUS_LABELS, StatusChamado } from '../lib/blueprint';
@@ -19,6 +29,7 @@ interface TicketDetailViewProps {
   chamadoId: string;
   orgaos: OrgaoResponsavelDoc[];
   hasMapsProvider: boolean;
+  initialAiError?: string;
   onBack: () => void;
 }
 
@@ -32,6 +43,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
   chamadoId,
   orgaos,
   hasMapsProvider,
+  initialAiError = '',
   onBack,
 }) => {
   const [chamado, setChamado] = useState<ChamadoDoc | null>(null);
@@ -42,8 +54,13 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [error, setError] = useState('');
+  const [copiedProtocol, setCopiedProtocol] = useState(false);
+  const [error, setError] = useState(initialAiError);
   const [zoomFoto, setZoomFoto] = useState<FotoDoc | null>(null);
+
+  useEffect(() => {
+    setError(initialAiError);
+  }, [initialAiError, chamadoId]);
 
   useEffect(() => {
     setLoading(true);
@@ -84,7 +101,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
     setError('');
     setAnalyzing(true);
     try {
-      await runChamadoAIAnalysis(chamado, orgaos);
+      await runChamadoAIAnalysis(chamado, orgaos, fotos);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao solicitar análise da IA.');
     } finally {
@@ -105,18 +122,29 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
     }
   };
 
+  const handleCopyProtocol = async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedProtocol(true);
+      window.setTimeout(() => setCopiedProtocol(false), 2000);
+    } catch {
+      setError('Não foi possível copiar automaticamente. Selecione o texto do protocolo manualmente.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="h-10 w-36 rounded-xl bg-zinc-200" />
-        <div className="h-40 rounded-2xl bg-zinc-100 border border-zinc-200" />
+        <div className="h-64 rounded-2xl bg-zinc-100 border border-zinc-200" />
       </div>
     );
   }
 
   if (!chamado) {
     return (
-      <div className="rounded-2xl border border-zinc-200 p-6 space-y-4">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-4">
         <p className="text-sm text-zinc-700">Chamado não encontrado.</p>
         <button
           type="button"
@@ -140,13 +168,27 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
       })
     : 'Agora';
 
+  const passos =
+    analise?.passosResolucao && analise.passosResolucao.length > 0
+      ? analise.passosResolucao
+      : [];
+
+  const protocoloTexto =
+    analise?.modeloProtocolo ||
+    (analise
+      ? `Solicitação de atendimento — ${analise.orgaoNome || 'Órgão Responsável'}\n` +
+        `Ocorrência: ${chamado.titulo} (${chamado.tipoProblemaNome})\n` +
+        `Local: ${chamado.enderecoResumo || chamado.regiaoResumo}\n` +
+        `Descrição: ${chamado.descricao || 'Solicito vistoria técnica no local.'}`
+      : '');
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={onBack}
-          className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-950 hover:bg-zinc-50 transition"
+          className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-950 hover:bg-zinc-50 transition whitespace-nowrap"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Voltar</span>
@@ -155,33 +197,208 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
         <StatusLabel status={chamado.status} />
       </div>
 
+      {/* Occurrence Title Banner */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+          <span>{chamado.tipoProblemaNome}</span>
+          <span aria-hidden="true">·</span>
+          <span>{chamado.regiaoResumo}</span>
+          <span aria-hidden="true">·</span>
+          <span className="font-mono tabular-nums">{dataFormatada}</span>
+        </div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-950 [text-wrap:balance]">
+          {chamado.titulo}
+        </h1>
+      </div>
+
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 space-y-2"
         >
-          {error}
+          <p>{error}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main ticket info + Photos */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                <span>{chamado.tipoProblemaNome}</span>
-                <span aria-hidden="true">·</span>
-                <span>{chamado.regiaoResumo}</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums">{dataFormatada}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Primary Focal Anchor: AI Diagnosis & Resolution Plan */}
+        <section
+          aria-label="Plano de resolução gerado pela IA"
+          className="lg:col-span-7 rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-zinc-950 shrink-0" />
+                <h2 className="text-lg font-bold text-zinc-950">
+                  Plano de resolução da IA
+                </h2>
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-zinc-950 [text-wrap:balance]">
-                {chamado.titulo}
-              </h1>
+              <p className="text-xs sm:text-sm text-zinc-600">
+                Diagnóstico por imagem e descrição, órgão indicado, passos práticos e protocolo pronto.
+              </p>
             </div>
 
-            <p className="text-sm sm:text-base text-zinc-700 leading-relaxed whitespace-pre-wrap">
+            {analise?.dataAnalise && (
+              <span className="text-xs font-mono tabular-nums text-zinc-500 whitespace-nowrap shrink-0">
+                {analise.dataAnalise.toDate().toLocaleDateString('pt-BR')}
+              </span>
+            )}
+          </div>
+
+          {analise ? (
+            <div className="space-y-5 pt-4 border-t border-zinc-200">
+              {/* Priority & Timeline */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+                <UrgenciaLabel urgencia={analise.urgencia} />
+                {analise.prazoEstimado && (
+                  <>
+                    <span aria-hidden="true" className="text-zinc-300">
+                      ·
+                    </span>
+                    <span className="text-zinc-700 font-medium">
+                      Prazo sugerido: {analise.prazoEstimado}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Diagnosis */}
+              <div className="space-y-1.5 pt-4 border-t border-zinc-200">
+                <h3 className="text-xs font-semibold text-zinc-500">Diagnóstico do problema</h3>
+                <p className="text-sm sm:text-[15px] text-zinc-800 leading-relaxed whitespace-pre-wrap">
+                  {analise.diagnostico || analise.orientacao}
+                </p>
+              </div>
+
+              {/* Practical Steps */}
+              <div className="space-y-3 pt-4 border-t border-zinc-200">
+                <h3 className="text-xs font-semibold text-zinc-500">
+                  Como resolver — passos recomendados
+                </h3>
+                {passos.length > 0 ? (
+                  <ol className="space-y-2.5">
+                    {passos.map((passo, index) => (
+                      <li
+                        key={`${index}-${passo.slice(0, 16)}`}
+                        className="flex items-start gap-3 text-sm text-zinc-800 leading-relaxed"
+                      >
+                        <span className="font-mono tabular-nums text-xs font-semibold text-zinc-950 pt-0.5 shrink-0">
+                          {String(index + 1).padStart(2, '0')}.
+                        </span>
+                        <span>{passo}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-zinc-800 leading-relaxed whitespace-pre-wrap">
+                    {analise.orientacao}
+                  </p>
+                )}
+              </div>
+
+              {/* Responsible Agency */}
+              {analise.orgaoNome && (
+                <div className="space-y-1.5 pt-4 border-t border-zinc-200">
+                  <h3 className="text-xs font-semibold text-zinc-500">
+                    Órgão indicado para atendimento
+                  </h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-zinc-950">{analise.orgaoNome}</p>
+                    {analise.orgaoContato && (
+                      <p className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-mono tabular-nums text-zinc-800">
+                        <Phone className="h-3.5 w-3.5 text-zinc-600" />
+                        <span>{analise.orgaoContato}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Ready-to-copy Protocol */}
+              {protocoloTexto && (
+                <div className="space-y-3 pt-4 border-t border-zinc-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold text-zinc-500">
+                      Modelo de protocolo para envio
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyProtocol(protocoloTexto)}
+                      className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-950 hover:bg-zinc-50 transition whitespace-nowrap shrink-0"
+                    >
+                      {copiedProtocol ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-700" />
+                          <span>Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copiar protocolo</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre className="rounded-xl bg-zinc-50 p-4 text-xs sm:text-sm text-zinc-800 whitespace-pre-wrap font-sans leading-relaxed">
+                    {protocoloTexto}
+                  </pre>
+                </div>
+              )}
+
+              {chamado.status !== 'RESOLVIDO' && (
+                <div className="pt-4 border-t border-zinc-200">
+                  <button
+                    type="button"
+                    disabled={analyzing}
+                    onClick={() => void handleRunAI()}
+                    className="min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-xs font-medium text-zinc-950 hover:bg-zinc-50 disabled:opacity-60 transition whitespace-nowrap"
+                  >
+                    {analyzing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    <span>
+                      {analyzing ? 'Atualizando análise...' : 'Atualizar análise com IA'}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4 pt-4 border-t border-zinc-200">
+              <p className="text-sm text-zinc-600 leading-relaxed">
+                O plano de resolução da IA ainda não foi gerado para esta ocorrência. Clique abaixo para executar a análise agora.
+              </p>
+              <button
+                type="button"
+                disabled={analyzing}
+                onClick={() => void handleRunAI()}
+                className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 py-3 text-sm font-medium text-white hover:bg-zinc-800 active:scale-[0.98] disabled:opacity-60 transition whitespace-nowrap"
+              >
+                {analyzing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                <span>
+                  {analyzing
+                    ? 'Gerando plano de resolução...'
+                    : error
+                    ? 'Tentar análise com IA novamente'
+                    : 'Gerar plano de resolução com IA'}
+                </span>
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Secondary Column: Occurrence Context, Status & Photos */}
+        <div className="lg:col-span-5 space-y-6">
+          <section
+            aria-label="Detalhes da ocorrência"
+            className="rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-4"
+          >
+            <h2 className="text-base font-bold text-zinc-950">Dados da ocorrência</h2>
+
+            <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">
               {chamado.descricao || 'Sem descrição adicional informada.'}
             </p>
 
@@ -208,7 +425,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
             )}
 
             {chamado.status !== 'RESOLVIDO' && (
-              <div className="pt-4 border-t border-zinc-200 space-y-2">
+              <div className="pt-4 border-t border-zinc-200 space-y-2.5">
                 <p className="text-xs font-medium text-zinc-600">Atualizar andamento</p>
                 <div className="flex flex-wrap gap-2">
                   {NEXT_STATUSES.map((s) => (
@@ -217,7 +434,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
                       type="button"
                       disabled={updatingStatus || chamado.status === s.value}
                       onClick={() => void handleStatusChange(s.value)}
-                      className={`min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-medium border transition ${
+                      className={`min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-medium border transition whitespace-nowrap ${
                         chamado.status === s.value
                           ? 'bg-zinc-950 text-white border-zinc-950'
                           : 'bg-white text-zinc-800 border-zinc-300 hover:bg-zinc-50'
@@ -235,10 +452,12 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
                 Chamado marcado como {STATUS_LABELS.RESOLVIDO}.
               </p>
             )}
-          </div>
+          </section>
 
-          {/* Photos Gallery */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-4">
+          <section
+            aria-label="Fotos anexadas"
+            className="rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-4"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-zinc-950">
@@ -248,7 +467,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
               </div>
 
               {chamado.status !== 'RESOLVIDO' && fotos.length < 20 && (
-                <label className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-xs font-medium text-zinc-950 hover:bg-zinc-50 cursor-pointer transition whitespace-nowrap">
+                <label className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-xs font-medium text-zinc-950 hover:bg-zinc-50 cursor-pointer transition whitespace-nowrap shrink-0">
                   <Camera className="h-4 w-4" />
                   <span>{uploadingFoto ? 'Enviando...' : 'Anexar foto'}</span>
                   <input
@@ -263,7 +482,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
             </div>
 
             {fotos.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-4">
+              <p className="text-sm text-zinc-500 py-2">
                 Nenhuma foto anexada a este chamado ainda.
               </p>
             ) : (
@@ -285,81 +504,7 @@ export const TicketDetailView: React.FC<TicketDetailViewProps> = ({
                 ))}
               </div>
             )}
-          </div>
-        </div>
-
-        {/* AI Analysis panel */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-5 sm:p-6 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <h2 className="text-base font-bold text-zinc-950">Análise da IA</h2>
-                <p className="text-xs text-zinc-600">
-                  Classificação de urgência, órgão competente e passos recomendados.
-                </p>
-              </div>
-              <Sparkles className="h-5 w-5 text-zinc-900 shrink-0" />
-            </div>
-
-            {analise ? (
-              <div className="space-y-4 pt-2 border-t border-zinc-200">
-                <div className="flex items-center justify-between gap-2">
-                  <UrgenciaLabel urgencia={analise.urgencia} />
-                  {analise.dataAnalise && (
-                    <span className="text-xs font-mono tabular-nums text-zinc-500">
-                      {analise.dataAnalise.toDate().toLocaleDateString('pt-BR')}
-                    </span>
-                  )}
-                </div>
-
-                {analise.orgaoNome && (
-                  <div className="rounded-xl border border-zinc-200 bg-white p-3.5 space-y-1">
-                    <p className="text-xs text-zinc-500">Órgão indicado</p>
-                    <p className="text-sm font-semibold text-zinc-950">{analise.orgaoNome}</p>
-                    {analise.orgaoContato && (
-                      <p className="inline-flex items-center gap-1.5 text-xs font-mono tabular-nums text-zinc-700">
-                        <Phone className="h-3.5 w-3.5" />
-                        <span>{analise.orgaoContato}</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-zinc-600">Orientações práticas</p>
-                  <p className="text-sm text-zinc-800 leading-relaxed whitespace-pre-wrap">
-                    {analise.orientacao}
-                  </p>
-                </div>
-
-                {chamado.status !== 'RESOLVIDO' && (
-                  <button
-                    type="button"
-                    disabled={analyzing}
-                    onClick={() => void handleRunAI()}
-                    className="w-full min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-xs font-medium text-zinc-950 hover:bg-zinc-100 disabled:opacity-60 transition"
-                  >
-                    {analyzing ? 'Reanalisando...' : 'Atualizar análise com IA'}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4 pt-2 border-t border-zinc-200">
-                <p className="text-sm text-zinc-600 leading-relaxed">
-                  Este chamado ainda não foi avaliado pela Inteligência Artificial.
-                </p>
-                <button
-                  type="button"
-                  disabled={analyzing}
-                  onClick={() => void handleRunAI()}
-                  className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl bg-zinc-950 px-5 py-3 text-sm font-medium text-white hover:bg-zinc-800 active:scale-[0.98] disabled:opacity-60 transition"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  <span>{analyzing ? 'Analisando chamado...' : 'Analisar com IA'}</span>
-                </button>
-              </div>
-            )}
-          </div>
+          </section>
         </div>
       </div>
 

@@ -21,6 +21,7 @@ import {
   UrgenciaIA,
 } from './blueprint';
 import { db, handleFirestoreError, OperationType } from './firebase';
+import { parseJsonResponse } from './httpJson';
 import { ProcessedImage } from './imageUtils';
 
 export interface UsuarioProfile {
@@ -128,6 +129,10 @@ export interface AnaliseIADoc {
   orgaoId: string;
   orgaoNome: string;
   orgaoContato: string;
+  diagnostico?: string;
+  prazoEstimado?: string;
+  passosResolucao?: string[];
+  modeloProtocolo?: string;
 }
 
 const DEFAULT_TIPOS: Array<{ id: string; nome: string }> = [
@@ -587,7 +592,7 @@ export async function createChamadoWithPhotos(params: {
   tipo: TipoProblemaDoc;
   fotos: ProcessedImage[];
   endereco?: EnderecoDoc | null;
-}): Promise<string> {
+}): Promise<ChamadoDoc> {
   const titulo = params.titulo.trim().slice(0, BLUEPRINT_LIMITS.CHAMADO_TITULO_MAX);
   const descricao = params.descricao.trim().slice(0, BLUEPRINT_LIMITS.CHAMADO_DESCRICAO_MAX);
 
@@ -600,6 +605,9 @@ export async function createChamadoWithPhotos(params: {
     0,
     220
   );
+  const usuarioNome = params.usuario.nome.slice(0, 120);
+  const tipoProblemaNome = params.tipo.nome.slice(0, 100);
+  const enderecoResumo = params.endereco ? formatEnderecoResumo(params.endereco) : undefined;
 
   const payload: Record<string, unknown> = {
     titulo,
@@ -607,18 +615,18 @@ export async function createChamadoWithPhotos(params: {
     dataAbertura: serverTimestamp(),
     status: 'ABERTO',
     usuarioId: params.usuario.uid,
-    usuarioNome: params.usuario.nome.slice(0, 120),
+    usuarioNome,
     regiaoId: params.regiao.id,
     regiaoResumo,
     tipoProblemaId: params.tipo.id,
-    tipoProblemaNome: params.tipo.nome.slice(0, 100),
+    tipoProblemaNome,
     fotosCount: 0,
     updatedAt: serverTimestamp(),
   };
 
-  if (params.endereco) {
+  if (params.endereco && enderecoResumo) {
     payload.enderecoId = params.endereco.id.slice(0, 128);
-    payload.enderecoResumo = formatEnderecoResumo(params.endereco);
+    payload.enderecoResumo = enderecoResumo;
     payload.latitude = params.endereco.latitude;
     payload.longitude = params.endereco.longitude;
   }
@@ -633,7 +641,29 @@ export async function createChamadoWithPhotos(params: {
     await attachFotoToChamado(chamadoRef.id, params.usuario.uid, foto);
   }
 
-  return chamadoRef.id;
+  return {
+    id: chamadoRef.id,
+    titulo,
+    descricao,
+    dataAbertura: null,
+    status: 'ABERTO',
+    usuarioId: params.usuario.uid,
+    usuarioNome,
+    regiaoId: params.regiao.id,
+    regiaoResumo,
+    tipoProblemaId: params.tipo.id,
+    tipoProblemaNome,
+    fotosCount: params.fotos.length,
+    ...(params.endereco && enderecoResumo
+      ? {
+          enderecoId: params.endereco.id.slice(0, 128),
+          enderecoResumo,
+          latitude: params.endereco.latitude,
+          longitude: params.endereco.longitude,
+        }
+      : {}),
+    updatedAt: null,
+  };
 }
 
 export async function attachFotoToChamado(
@@ -747,9 +777,47 @@ export async function updateChamadoStatus(
   }
 }
 
+export interface SugestaoChamadoIA {
+  titulo: string;
+  tipoId: string;
+  tipoNome: string;
+  descricaoSugerida: string;
+}
+
+export async function suggestChamadoFromPhotoAndDescription(params: {
+  descricao: string;
+  fotos: Array<{ imagemDataUrl: string; mimeType?: string }>;
+  tipos: TipoProblemaDoc[];
+}): Promise<SugestaoChamadoIA> {
+  const resp = await fetch('/api/analisar/sugerir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      descricao: params.descricao,
+      fotos: params.fotos.slice(0, 4).map((f) => ({
+        imagemDataUrl: f.imagemDataUrl,
+        mimeType: f.mimeType,
+      })),
+      tipos: params.tipos,
+    }),
+  });
+
+  const data = await parseJsonResponse<SugestaoChamadoIA & { message?: string }>(
+    resp,
+    'Não foi possível gerar sugestão com a IA.'
+  );
+
+  if (!resp.ok) {
+    throw new Error(data.message || 'Não foi possível gerar sugestão com a IA.');
+  }
+
+  return data;
+}
+
 export async function runChamadoAIAnalysis(
   chamado: ChamadoDoc,
-  orgaos: OrgaoResponsavelDoc[]
+  orgaos: OrgaoResponsavelDoc[],
+  fotos: Array<{ imagemDataUrl: string; mimeType?: string }> = []
 ): Promise<void> {
   const resp = await fetch('/api/analisar', {
     method: 'POST',
@@ -759,24 +827,40 @@ export async function runChamadoAIAnalysis(
       tipoProblemaNome: chamado.tipoProblemaNome,
       descricao: chamado.descricao,
       regiaoResumo: chamado.regiaoResumo,
-      fotosCount: chamado.fotosCount,
+      enderecoResumo: chamado.enderecoResumo || '',
+      fotosCount: Math.max(chamado.fotosCount, fotos.length),
+      fotos: fotos.slice(0, 4).map((f) => ({
+        imagemDataUrl: f.imagemDataUrl,
+        mimeType: f.mimeType,
+      })),
       orgaos,
     }),
   });
 
-  const data = (await resp.json()) as {
+  const data = await parseJsonResponse<{
     urgencia?: UrgenciaIA;
+    prazoEstimado?: string;
+    diagnostico?: string;
+    passosResolucao?: string[];
+    modeloProtocolo?: string;
     orientacao?: string;
     respostaBruta?: string;
     orgaoId?: string;
     orgaoNome?: string;
     orgaoContato?: string;
     message?: string;
-  };
+  }>(resp, 'Falha ao executar análise da IA.');
 
   if (!resp.ok) {
     throw new Error(data.message || 'Falha ao executar análise da IA.');
   }
+
+  const passosResolucao = Array.isArray(data.passosResolucao)
+    ? data.passosResolucao
+        .map((p) => String(p || '').trim().slice(0, BLUEPRINT_LIMITS.ANALISE_PASSO_ITEM_MAX))
+        .filter(Boolean)
+        .slice(0, BLUEPRINT_LIMITS.ANALISE_PASSOS_MAX)
+    : [];
 
   const analiseRef = doc(db, 'chamados', chamado.id, 'analise', 'atual');
   const chamadoRef = doc(db, 'chamados', chamado.id);
@@ -784,14 +868,24 @@ export async function runChamadoAIAnalysis(
   try {
     await setDoc(analiseRef, {
       urgencia: data.urgencia || 'MEDIA',
-      orientacao: (data.orientacao || '').slice(0, 2000),
-      respostaBruta: (data.respostaBruta || '').slice(0, 4000),
+      orientacao: (data.orientacao || '').slice(0, BLUEPRINT_LIMITS.ANALISE_ORIENTACAO_MAX),
+      respostaBruta: (data.respostaBruta || '').slice(
+        0,
+        BLUEPRINT_LIMITS.ANALISE_RESPOSTA_BRUTA_MAX
+      ),
       dataAnalise: serverTimestamp(),
       chamadoId: chamado.id,
       usuarioId: chamado.usuarioId,
       orgaoId: (data.orgaoId || '').slice(0, 128),
       orgaoNome: (data.orgaoNome || '').slice(0, 120),
       orgaoContato: (data.orgaoContato || '').slice(0, 100),
+      diagnostico: (data.diagnostico || '').slice(0, BLUEPRINT_LIMITS.ANALISE_DIAGNOSTICO_MAX),
+      prazoEstimado: (data.prazoEstimado || '').slice(0, BLUEPRINT_LIMITS.ANALISE_PRAZO_MAX),
+      passosResolucao,
+      modeloProtocolo: (data.modeloProtocolo || '').slice(
+        0,
+        BLUEPRINT_LIMITS.ANALISE_PROTOCOLO_MAX
+      ),
     });
 
     if (chamado.status !== 'RESOLVIDO') {
